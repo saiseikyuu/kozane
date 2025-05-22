@@ -1,10 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+// --- SYMBOL → COINPAPRIKA ID MAP ---
+const SYMBOL_TO_ID: Record<string, string> = {
+  BTC: "btc-bitcoin",
+  ETH: "eth-ethereum",
+  SOL: "sol-solana",
+  DOGE: "doge-dogecoin",
+  XRP: "xrp-xrp",
+};
 
 interface Token {
-  name: string;
+  name: string; // BTC
+  id: string; // btc-bitcoin
   invested: number;
+  price?: number;
 }
 
 export default function DashboardPage() {
@@ -16,6 +27,30 @@ export default function DashboardPage() {
     [key: string]: string;
   }>({});
 
+  // --- Fetch price from CoinPaprika ---
+  const fetchPaprikaPrice = async (tokenId: string): Promise<number | null> => {
+    try {
+      const res = await fetch(
+        `https://api.coinpaprika.com/v1/tickers/${tokenId}`
+      );
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      return data.quotes.USD.price;
+    } catch {
+      return null;
+    }
+  };
+
+  // 🧠 Fetch price only when new token is added (not on every state change)
+  const fetchTokenPriceAndSet = async (token: Token) => {
+    const price = await fetchPaprikaPrice(token.id);
+    setTokens((prev) =>
+      prev.map((t) =>
+        t.name === token.name ? { ...t, price: price ?? undefined } : t
+      )
+    );
+  };
+
   const handleAddBudget = () => {
     const value = parseFloat(input);
     if (!isNaN(value)) {
@@ -26,10 +61,15 @@ export default function DashboardPage() {
 
   const handleAddToken = () => {
     const name = newToken.trim().toUpperCase();
-    if (name && !tokens.some((t) => t.name === name)) {
-      setTokens((prev) => [...prev, { name, invested: 0 }]);
-      setNewToken("");
-    }
+    const id = SYMBOL_TO_ID[name];
+    if (!id || tokens.some((t) => t.name === name)) return;
+
+    const newEntry = { name, id, invested: 0 };
+    setTokens((prev) => [...prev, newEntry]);
+    setNewToken("");
+
+    // 🔁 fetch price for new token
+    fetchTokenPriceAndSet(newEntry);
   };
 
   const handleInvest = (name: string) => {
@@ -48,8 +88,8 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      <h1 className="text-3xl font-bold">📘 Kozane Dashboard</h1>
+    <div className="max-w-3xl mx-auto space-y-8 px-[20px] py-[40px]">
+      <h1 className="text-3xl font-bold text-center">Kozane Dashboard</h1>
 
       {/* Budget Section */}
       <section className="bg-zinc-800 p-6 rounded space-y-4">
@@ -80,7 +120,7 @@ export default function DashboardPage() {
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="e.g., BTC, ETH"
+            placeholder="e.g., BTC, ETH, SOL"
             className="w-full p-2 rounded bg-zinc-900 border border-zinc-700"
             value={newToken}
             onChange={(e) => setNewToken(e.target.value)}
@@ -105,7 +145,8 @@ export default function DashboardPage() {
             <div className="flex justify-between items-center">
               <span className="font-semibold">{token.name}</span>
               <span className="text-sm text-gray-400">
-                Invested: ₱{token.invested.toLocaleString()}
+                Invested: ₱{token.invested.toLocaleString()} | Price: $
+                {token.price?.toFixed(2) ?? "..."}
               </span>
             </div>
             <div className="flex gap-2">
