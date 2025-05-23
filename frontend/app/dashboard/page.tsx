@@ -1,19 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-// --- SYMBOL → COINPAPRIKA ID MAP ---
-const SYMBOL_TO_ID: Record<string, string> = {
-  BTC: "btc-bitcoin",
-  ETH: "eth-ethereum",
-  SOL: "sol-solana",
-  DOGE: "doge-dogecoin",
-  XRP: "xrp-xrp",
-};
+import { useState } from "react";
 
 interface Token {
-  name: string; // BTC
-  id: string; // btc-bitcoin
+  name: string;
+  symbol: string;
+  id: string;
   invested: number;
   price?: number;
 }
@@ -24,16 +16,44 @@ export default function DashboardPage() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [newToken, setNewToken] = useState("");
   const [investmentInputs, setInvestmentInputs] = useState<{
-    [key: string]: string;
+    [symbol: string]: string;
+  }>({});
+  const [withdrawInputs, setWithdrawInputs] = useState<{
+    [symbol: string]: string;
   }>({});
 
-  // --- Fetch price from CoinPaprika ---
+  const fetchCoinIdFromSymbol = async (
+    symbol: string
+  ): Promise<Token | null> => {
+    try {
+      const res = await fetch("https://api.coinpaprika.com/v1/coins");
+      const coins = await res.json();
+
+      const coin = coins.find(
+        (c: any) =>
+          c.symbol.toUpperCase() === symbol.toUpperCase() &&
+          c.rank !== 0 &&
+          !c.is_token
+      );
+
+      if (!coin) return null;
+
+      return {
+        name: coin.name,
+        symbol: coin.symbol.toUpperCase(),
+        id: coin.id,
+        invested: 0,
+      };
+    } catch {
+      return null;
+    }
+  };
+
   const fetchPaprikaPrice = async (tokenId: string): Promise<number | null> => {
     try {
       const res = await fetch(
         `https://api.coinpaprika.com/v1/tickers/${tokenId}`
       );
-      if (!res.ok) throw new Error();
       const data = await res.json();
       return data.quotes.USD.price;
     } catch {
@@ -41,12 +61,11 @@ export default function DashboardPage() {
     }
   };
 
-  // 🧠 Fetch price only when new token is added (not on every state change)
   const fetchTokenPriceAndSet = async (token: Token) => {
     const price = await fetchPaprikaPrice(token.id);
     setTokens((prev) =>
       prev.map((t) =>
-        t.name === token.name ? { ...t, price: price ?? undefined } : t
+        t.symbol === token.symbol ? { ...t, price: price ?? undefined } : t
       )
     );
   };
@@ -59,39 +78,55 @@ export default function DashboardPage() {
     }
   };
 
-  const handleAddToken = () => {
-    const name = newToken.trim().toUpperCase();
-    const id = SYMBOL_TO_ID[name];
-    if (!id || tokens.some((t) => t.name === name)) return;
+  const handleAddToken = async () => {
+    const symbol = newToken.trim().toUpperCase();
+    if (!symbol || tokens.some((t) => t.symbol === symbol)) return;
 
-    const newEntry = { name, id, invested: 0 };
-    setTokens((prev) => [...prev, newEntry]);
+    const token = await fetchCoinIdFromSymbol(symbol);
+    if (!token) {
+      alert("Token not found.");
+      return;
+    }
+
+    setTokens((prev) => [...prev, token]);
     setNewToken("");
-
-    // 🔁 fetch price for new token
-    fetchTokenPriceAndSet(newEntry);
+    fetchTokenPriceAndSet(token);
   };
 
-  const handleInvest = (name: string) => {
-    const value = parseFloat(investmentInputs[name]);
+  const handleInvest = (symbol: string) => {
+    const value = parseFloat(investmentInputs[symbol]);
     if (isNaN(value) || value <= 0 || value > budget) return;
 
     setTokens((prev) =>
       prev.map((token) =>
-        token.name === name
+        token.symbol === symbol
           ? { ...token, invested: token.invested + value }
           : token
       )
     );
     setBudget((prev) => prev - value);
-    setInvestmentInputs((prev) => ({ ...prev, [name]: "" }));
+    setInvestmentInputs((prev) => ({ ...prev, [symbol]: "" }));
+  };
+
+  const handleWithdraw = (symbol: string) => {
+    const value = parseFloat(withdrawInputs[symbol]);
+    const token = tokens.find((t) => t.symbol === symbol);
+    if (!token || isNaN(value) || value <= 0 || value > token.invested) return;
+
+    setTokens((prev) =>
+      prev.map((t) =>
+        t.symbol === symbol ? { ...t, invested: t.invested - value } : t
+      )
+    );
+    setBudget((prev) => prev + value);
+    setWithdrawInputs((prev) => ({ ...prev, [symbol]: "" }));
   };
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 px-[20px] py-[40px]">
       <h1 className="text-3xl font-bold text-center">Kozane Dashboard</h1>
 
-      {/* Budget Section */}
+      {/* 💰 Budget Section */}
       <section className="bg-zinc-800 p-6 rounded space-y-4">
         <h2 className="text-xl font-semibold">💰 Investment Budget</h2>
         <div className="text-3xl text-green-400">
@@ -114,7 +149,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Add Token Section */}
+      {/* ➕ Add Token Section */}
       <section className="bg-zinc-800 p-6 rounded space-y-4">
         <h2 className="text-xl font-semibold">➕ Add Token</h2>
         <div className="flex gap-2">
@@ -131,7 +166,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Token List */}
+      {/* 📊 Token List */}
       <section className="bg-zinc-800 p-6 rounded space-y-2">
         <h2 className="text-xl font-semibold">📊 Your Tokens</h2>
         {tokens.length === 0 && (
@@ -139,11 +174,13 @@ export default function DashboardPage() {
         )}
         {tokens.map((token) => (
           <div
-            key={token.name}
+            key={token.symbol}
             className="flex flex-col gap-2 border-b border-zinc-700 py-3"
           >
             <div className="flex justify-between items-center">
-              <span className="font-semibold">{token.name}</span>
+              <span className="font-semibold">
+                {token.name} ({token.symbol})
+              </span>
               <span className="text-sm text-gray-400">
                 Invested: ₱{token.invested.toLocaleString()} | Price: $
                 {token.price?.toFixed(2) ?? "..."}
@@ -152,21 +189,41 @@ export default function DashboardPage() {
             <div className="flex gap-2">
               <input
                 type="number"
-                placeholder="₱ Amount"
+                placeholder="₱ Invest"
                 className="w-full p-2 rounded bg-zinc-900 border border-zinc-700"
-                value={investmentInputs[token.name] || ""}
+                value={investmentInputs[token.symbol] || ""}
                 onChange={(e) =>
                   setInvestmentInputs((prev) => ({
                     ...prev,
-                    [token.name]: e.target.value,
+                    [token.symbol]: e.target.value,
                   }))
                 }
               />
               <button
-                onClick={() => handleInvest(token.name)}
+                onClick={() => handleInvest(token.symbol)}
                 className="bg-purple-600 px-4 rounded"
               >
                 Invest
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="₱ Withdraw"
+                className="w-full p-2 rounded bg-zinc-900 border border-zinc-700"
+                value={withdrawInputs[token.symbol] || ""}
+                onChange={(e) =>
+                  setWithdrawInputs((prev) => ({
+                    ...prev,
+                    [token.symbol]: e.target.value,
+                  }))
+                }
+              />
+              <button
+                onClick={() => handleWithdraw(token.symbol)}
+                className="bg-red-600 px-4 rounded"
+              >
+                Withdraw
               </button>
             </div>
           </div>
