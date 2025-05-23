@@ -122,20 +122,38 @@ export default function DashboardPage() {
     setWithdrawInputs((prev) => ({ ...prev, [symbol]: "" }));
   };
 
+  const totalInvested = tokens.reduce((sum, t) => sum + t.invested, 0);
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 px-[20px] py-[40px]">
       <h1 className="text-3xl font-bold text-center">Kozane Dashboard</h1>
 
-      {/* 💰 Budget Section */}
+      {/* 💹 Portfolio Summary */}
       <section className="bg-zinc-800 p-6 rounded space-y-4">
-        <h2 className="text-xl font-semibold">💰 Investment Budget</h2>
-        <div className="text-3xl text-green-400">
-          ₱{budget.toLocaleString()}
+        <h2 className="text-xl font-semibold">💹 Portfolio Summary (USD)</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
+          <div className="bg-zinc-900 p-4 rounded">
+            <p className="text-sm text-gray-400">Available Budget</p>
+            <p className="text-2xl text-green-400">
+              ${budget.toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-zinc-900 p-4 rounded">
+            <p className="text-sm text-gray-400">Total Invested</p>
+            <p className="text-2xl text-orange-400">
+              ${totalInvested.toLocaleString()}
+            </p>
+          </div>
         </div>
+      </section>
+
+      {/* ➕ Add to Budget */}
+      <section className="bg-zinc-800 p-6 rounded space-y-4">
+        <h2 className="text-xl font-semibold">➕ Add to Budget (USD)</h2>
         <div className="flex gap-2">
           <input
             type="number"
-            placeholder="Add amount"
+            placeholder="$ Amount"
             className="w-full p-2 rounded bg-zinc-900 border border-zinc-700"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -149,7 +167,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* ➕ Add Token Section */}
+      {/* ➕ Add Token */}
       <section className="bg-zinc-800 p-6 rounded space-y-4">
         <h2 className="text-xl font-semibold">➕ Add Token</h2>
         <div className="flex gap-2">
@@ -182,14 +200,16 @@ export default function DashboardPage() {
                 {token.name} ({token.symbol})
               </span>
               <span className="text-sm text-gray-400">
-                Invested: ₱{token.invested.toLocaleString()} | Price: $
+                Invested: ${token.invested.toLocaleString()} | Price: $
                 {token.price?.toFixed(2) ?? "..."}
               </span>
             </div>
+
+            {/* 💸 Invest */}
             <div className="flex gap-2">
               <input
                 type="number"
-                placeholder="₱ Invest"
+                placeholder="$ Amount"
                 className="w-full p-2 rounded bg-zinc-900 border border-zinc-700"
                 value={investmentInputs[token.symbol] || ""}
                 onChange={(e) =>
@@ -206,10 +226,12 @@ export default function DashboardPage() {
                 Invest
               </button>
             </div>
+
+            {/* 🏧 Withdraw */}
             <div className="flex gap-2">
               <input
                 type="number"
-                placeholder="₱ Withdraw"
+                placeholder="$ Amount"
                 className="w-full p-2 rounded bg-zinc-900 border border-zinc-700"
                 value={withdrawInputs[token.symbol] || ""}
                 onChange={(e) =>
